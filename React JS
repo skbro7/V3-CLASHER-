@@ -1,0 +1,309 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Loader, Send, Image as ImageIcon, Plus, AlertCircle, Download, X, MoreVertical, WandSparkles, Palette } from 'lucide-react';
+
+// --- Style Configuration ---
+const STYLES = [
+    { name: 'Cinematic', keywords: 'cinematic film still, ultra-detailed, professional color grading, photorealistic, dramatic lighting' },
+    { name: 'Hyper Realistic', keywords: 'hyperrealistic, ultra detailed face, sharp focus, studio lighting, detailed skin texture, 85mm lens' },
+    { name: 'Ghibli', keywords: 'ghibli studio anime style, hand-drawn, heartwarming, soft watercolor palette, detailed background art' },
+    { name: 'Cyberpunk', keywords: 'cyberpunk city, neon lights, futuristic, dystopian, blade runner style, vibrant reflections' },
+    { name: 'Fantasy', keywords: 'epic fantasy digital art, detailed, concept art, trending on artstation, matte painting, breathtaking' },
+    { name: 'Horror', keywords: 'horror movie scene, dark, eerie, unsettling, high contrast, grainy texture, suspenseful' },
+    { name: 'Vintage', keywords: 'vintage photograph, 1950s style, sepia tones, film grain, retro aesthetic, classic car' },
+    { name: 'Pixar', keywords: 'pixar animation style, 3d render, cute and adorable characters, vibrant and colorful, smooth textures' },
+];
+
+// --- Helper: THE NEW GPT-LEVEL PROMPT ENGINE ---
+const getAIEnhancedPrompt = async (prompt, selectedStyle, base64Images = [], forMagic = false) => {
+    let userPrompt;
+    const parts = [];
+    
+    // This is the core of the 4K Ultra-Realistic upgrade.
+    // It creates a highly specific, professional-grade prompt by instructing the AI to adopt multiple expert personas.
+    const personaInstruction = `Tum ek expert team ho jismein ek AI Prompt Engineer, ek professional photographer, ek master typographer, aur ek cinematic colorist shaamil hain. Tumhara kaam user ke diye gaye simple idea ko ek masterpiece-level, hyper-detailed, aur photorealistic image prompt mein badalna hai.
+
+    **Tumhara Process:**
+    1.  **Analyze Intent:** User ke prompt ("${prompt}") ko gehraai se analyze karo. Subject, mood, setting, objects, aur style (jaise "anime", "surreal", "realistic", "cinematic") ko samjho.
+    2.  **Auto-Select Style & Model:** Agar user ke prompt mein koi khaas style keyword hai, to us style ko prathmikta do. Agar nahi, to user ke select kiye gaye style ("${selectedStyle}") ka istemal karo.
+    3.  **Expand into Cinematic Detail (Photographer's Job):** User ke idea ko ek full cinematic scene mein expand karo. Professional camera settings jodo: "Shot on Sony A7R IV, 85mm F1.4 lens", "cinematic volumetric lighting", "soft golden hour light", "dramatic shadows", "subtle reflections". Main subject par "subtle focus pull" aur background mein "shallow depth of field with creamy bokeh" apply karo.
+    4.  **Add Rich Textures & Details:** "Intricate fabric textures", "natural skin pores", "anatomically correct", "hyper-detailed eyes with clear reflections", "individual hair strands visible" jaise details jodo.
+    5.  **Typography Control (Typographer's Job):** Agar prompt mein text hai, to use "perfectly rendered, straight, clean alignment, no warping" ke saath render karo. Mood ke hisaab se font chuno (jaise "bold sans-serif for offers", "elegant serif for fashion"). Text placement (top-left, center, etc.) ka dhyaan rakho aur behtar readability ke liye "subtle drop shadow" add karo.
+    6.  **Color Grading (Colorist's Job):** "Cinematic color grading, balanced contrast, vibrant but natural hues, no oversaturation, premium look" jaise nirdesh jodo.
+    7.  **Exclusion Logic:** User ke prompt mein "no people", "no animals", "without text" jaise negative shabdon ko dhoondho aur unhe ek powerful negative prompt mein badlo.
+    8.  **Enforce Ultimate Quality:** Hamesha "True 4K Ultra HD, ultra-sharp, highly detailed, rich in texture, masterpiece, no blur, crystal clear" jaise keywords jodo.
+    9.  **Bug & Error Shield:** Chhote-mote parsing issues ko silently theek karo.
+
+    **Reference Images:** Agar reference images di gayi hain, to unke subjects, composition, aur lighting se heavily inspire ho, lekin unhe copy mat karo.
+
+    **Final Output:** Jawab sirf aur sirf final, ready-to-use, single-paragraph prompt hona chahiye. Koi extra text ya explanation mat do.`;
+
+    if (forMagic) {
+        userPrompt = `Tum ek creative assistant ho. Is chhotey se idea ko ek full, detailed, aur visually rich prompt mein badlo. Ek poori scene ka varnan karo jismein lighting, textures, camera angle, background blur, mood, aur color tone shaamil ho. Iska style "${selectedStyle}" hona chahiye. Ant mein 4K Ultra HD, sharp, crystal clear keywords jodo. Jawab sirf naya prompt hona chahiye. User ka idea hai: "${prompt}"`;
+        parts.push({ text: userPrompt });
+    } else {
+        parts.push({ text: personaInstruction });
+        base64Images.forEach(imgData => {
+            parts.push({ inlineData: { mimeType: "image/jpeg", data: imgData.split(',')[1] } });
+        });
+    }
+    
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: "user", parts }] })
+    });
+
+    if (!response.ok) throw new Error("AI prompt engine mein vifal raha.");
+    const result = await response.json();
+    if (result.candidates && result.candidates[0]?.content?.parts[0]?.text) {
+        return result.candidates[0].content.parts[0].text;
+    }
+    // Fallback to a simpler enhancement if the complex one fails
+    const styleKeywords = STYLES.find(s => s.name === selectedStyle)?.keywords || '';
+    return `${prompt}, ${styleKeywords}, 4K, Ultra HD, sharp, masterpiece`;
+};
+
+
+// --- UI Components (No layout changes) ---
+const Header = ({ onMenuClick }) => (
+    <header className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-20">
+        <h1 className="text-xl md:text-2xl font-bold text-white tracking-wider">V3 CLASHER</h1>
+        <button onClick={onMenuClick} className="p-2 rounded-full hover:bg-gray-800 transition-colors" title="History">
+            <MoreVertical className="w-6 h-6 text-white" />
+        </button>
+    </header>
+);
+
+const ImageDisplay = ({ generatedImage, isLoading, error }) => (
+    <div className="w-full h-full bg-black rounded-3xl flex items-center justify-center p-2 transition-all duration-500 shadow-[0_0_30px_5px_rgba(0,0,0,0.3)] relative">
+        <div className="w-full h-full border border-gray-800 rounded-2xl flex items-center justify-center overflow-hidden">
+            {isLoading && (
+                <div className="flex flex-col items-center gap-4 text-gray-400 animate-fade-in">
+                    <Loader className="w-12 h-12 text-white animate-spin" />
+                    <p className="font-medium tracking-widest animate-pulse">GENERATING...</p>
+                </div>
+            )}
+            {!isLoading && error && (
+                <div className="flex flex-col items-center gap-4 text-center text-red-500 p-6 animate-fade-in">
+                    <AlertCircle className="w-12 h-12" />
+                    <p className="font-bold">Ek Samasya Aa Gayi</p>
+                    <p className="text-gray-400 text-sm">{error}</p>
+                </div>
+            )}
+            {!isLoading && !error && generatedImage && (
+                <img src={generatedImage} alt="Generated masterpiece" className="w-full h-full object-contain rounded-xl animate-fade-in-slow" />
+            )}
+            {!isLoading && !error && !generatedImage && (
+                <div className="flex flex-col items-center gap-4 text-gray-600 animate-fade-in">
+                    <ImageIcon className="w-20 h-20" />
+                    <p className="font-medium">Aapki AI image yahaan dikhegi</p>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+const StyleMenu = ({ isOpen, onClose, selectedStyle, onSelect }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/60 z-30 flex items-center justify-center" onClick={onClose}>
+            <div className="bg-gray-900 border border-gray-700 rounded-lg shadow-2xl w-full max-w-sm p-4 animate-fade-in" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-white mb-4 text-center">Select a Style</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    {STYLES.map(style => (
+                        <button 
+                            key={style.name}
+                            onClick={() => { onSelect(style.name); onClose(); }}
+                            className={`p-3 rounded-md text-sm font-semibold transition-colors ${selectedStyle === style.name ? 'bg-white text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}
+                        >
+                            {style.name}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const HistoryDrawer = ({ history, isOpen, onClose, onView, onSave, onDelete }) => (
+    <>
+        <div className={`fixed inset-0 bg-black/60 z-30 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose} />
+        <div className={`fixed top-0 right-0 h-full w-full max-w-sm bg-gray-900 shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className="flex justify-between items-center p-4 border-b border-gray-700">
+                <h2 className="text-lg font-bold text-white">History</h2>
+                <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-800"><X className="w-6 h-6 text-white" /></button>
+            </div>
+            {history.length === 0 ? (
+                <p className="text-gray-500 text-center p-8">Aapki history yahan dikhegi.</p>
+            ) : (
+                <div className="p-4 grid grid-cols-2 gap-4 overflow-y-auto h-[calc(100vh-65px)]">
+                    {history.map((item) => (
+                        <div key={item.id} className="group relative rounded-lg overflow-hidden shadow-lg border border-gray-700">
+                            <img src={item.url} alt="Generated" className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2 gap-2">
+                                <button onClick={() => onView(item)} className="text-xs bg-gray-200 text-black px-2 py-1 rounded-md font-semibold hover:bg-white">View</button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => onSave(item.url)} className="flex-1 text-xs bg-blue-600 text-white px-2 py-1 rounded-md font-semibold hover:bg-blue-500">Save Image</button>
+                                    <button onClick={() => onDelete(item.id)} className="flex-1 text-xs bg-red-600 text-white px-2 py-1 rounded-md font-semibold hover:bg-red-500">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    </>
+);
+
+
+// --- Main App Component ---
+export default function App() {
+    const [prompt, setPrompt] = useState('');
+    const [referenceImages, setReferenceImages] = useState([]);
+    const [generatedImage, setGeneratedImage] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isMagicking, setIsMagicking] = useState(false);
+    const [error, setError] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [aspectRatio, setAspectRatio] = useState('1:1');
+    const [selectedStyle, setSelectedStyle] = useState(STYLES[0].name);
+    const [isStyleMenuOpen, setIsStyleMenuOpen] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const handleImageUpload = (e) => {
+        if (referenceImages.length >= 3) return;
+        const file = e.target.files[0];
+        if (file) setReferenceImages(prev => [...prev, { id: Date.now(), url: URL.createObjectURL(file) }]);
+    };
+
+    const removeReferenceImage = (id) => setReferenceImages(prev => prev.filter(img => img.id !== id));
+
+    const handleGenerateImage = async () => {
+        if (!prompt.trim()) return;
+        setIsLoading(true);
+        setError(null);
+        setGeneratedImage(null);
+
+        try {
+            const base64Images = await Promise.all(referenceImages.map(async (img) => new Promise(resolve => {
+                const reader = new FileReader();
+                fetch(img.url).then(r => r.blob()).then(blob => {
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+            })));
+            
+            let enhancedPrompt = await getAIEnhancedPrompt(prompt, selectedStyle, base64Images);
+            
+            const payload = { instances: [{ prompt: enhancedPrompt }], parameters: { "sampleCount": 1, "aspectRatio": aspectRatio } };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+            if (!response.ok) throw new Error(`API Error (${response.status})`);
+            const result = await response.json();
+
+            if (result.predictions && result.predictions[0]?.bytesBase64Encoded) {
+                const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                setGeneratedImage(imageUrl);
+                setHistory(prev => [{ id: Date.now(), url: imageUrl, prompt: prompt }, ...prev]);
+            } else {
+                throw new Error("API se koi valid image nahi mili.");
+            }
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleMagicPrompt = async () => {
+        if (!prompt.trim()) return;
+        setIsMagicking(true);
+        try {
+            const magicPrompt = await getAIEnhancedPrompt(prompt, selectedStyle, [], true);
+            setPrompt(magicPrompt.trim());
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setIsMagicking(false);
+        }
+    };
+    
+    const handleSaveImage = (url) => {
+        if (!url) return;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const size = Math.max(img.width, img.height);
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, (size - img.width) / 2, (size - img.height) / 2);
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = `v3-clasher-1-1-${Date.now()}.png`;
+            link.click();
+        };
+    };
+    
+    const deleteFromHistory = (id) => setHistory(prev => prev.filter(item => item.id !== id));
+    const viewFromHistory = (item) => {
+        setGeneratedImage(item.url);
+        setPrompt(item.prompt);
+        setIsHistoryOpen(false);
+    };
+
+    useEffect(() => {
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap'); body, .font-sans { font-family: 'Inter', sans-serif; } @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } } @keyframes fade-in-slow { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } } .animate-fade-in { animation: fade-in 0.5s ease-out forwards; } .animate-fade-in-slow { animation: fade-in-slow 0.6s ease-in-out forwards; }`;
+        document.head.appendChild(styleSheet);
+        return () => document.head.removeChild(styleSheet);
+    }, []);
+
+    return (
+        <div className="bg-black min-h-screen w-full flex flex-col items-center justify-between p-4 font-sans text-white overflow-hidden relative">
+            <Header onMenuClick={() => setIsHistoryOpen(true)} />
+            <HistoryDrawer history={history} isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onView={viewFromHistory} onSave={handleSaveImage} onDelete={deleteFromHistory} />
+            <StyleMenu isOpen={isStyleMenuOpen} onClose={() => setIsStyleMenuOpen(false)} selectedStyle={selectedStyle} onSelect={setSelectedStyle} />
+            
+            <main className="flex-1 flex flex-col items-center justify-center w-full max-w-2xl mt-16 mb-4">
+                <div className="w-full aspect-square">
+                   <ImageDisplay generatedImage={generatedImage} isLoading={isLoading} error={error} />
+                </div>
+                 {generatedImage && !isLoading && (
+                    <div className="w-full mt-4 flex justify-center animate-fade-in">
+                        <button onClick={() => handleSaveImage(generatedImage)} className="flex items-center gap-2 px-6 py-2 bg-gray-800 text-white font-semibold rounded-full border border-gray-700 hover:bg-white hover:text-black transition-colors">
+                            <Download size={16} /> Save Image
+                        </button>
+                    </div>
+                )}
+            </main>
+
+            <footer className="w-full max-w-2xl flex flex-col gap-3 z-10">
+                 <div className="flex items-center justify-center gap-3">
+                    <button onClick={handleMagicPrompt} disabled={isLoading || isMagicking || !prompt.trim()} className="flex items-center gap-2 px-4 py-2 bg-gray-800/80 text-white text-sm font-semibold rounded-full border border-gray-700 hover:bg-gray-700 transition-colors disabled:opacity-50">
+                        {isMagicking ? <Loader size={16} className="animate-spin"/> : <WandSparkles size={16} />} Magic Prompt
+                    </button>
+                     <button onClick={() => setIsStyleMenuOpen(true)} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 bg-gray-800/80 text-white text-sm font-semibold rounded-full border border-gray-700 hover:bg-gray-700 transition-colors disabled:opacity-50">
+                        <Palette size={16} /> Style
+                    </button>
+                    <div className="flex items-center gap-1 p-1 bg-gray-800/80 rounded-full border border-gray-700">
+                        {['1:1', '16:9', '9:16'].map(r => (
+                            <button key={r} onClick={() => setAspectRatio(r)} className={`px-3 py-1 text-sm rounded-full ${aspectRatio === r ? 'bg-white text-black' : 'text-white hover:bg-gray-700'}`}>
+                                {r}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full bg-gray-900/80 border border-gray-700 rounded-lg p-2 pl-3 shadow-lg backdrop-blur-md">
+                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                    <button onClick={() => fileInputRef.current.click()} disabled={referenceImages.length >= 3} className="flex-shrink-0 w-10 h-10 bg-gray-800 rounded-md flex items-center justify-center hover:bg-gray-700 transition-colors relative disabled:opacity-50" title="Upload Reference Image">
+                   
